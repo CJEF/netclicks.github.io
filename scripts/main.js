@@ -3,7 +3,7 @@ const SERVER = 'https://api.themoviedb.org/3';
 const API_KEY = '694c1efc28e91a715abfe0f4eecb07b2';
 const leftMenu = document.querySelector('.left-menu'),
       hamburger = document.querySelector('.hamburger'),
-      dropdown = document.querySelector('.dropdown'),
+      dropdown = document.querySelectorAll('.dropdown'),
       modal = document.querySelector('.modal'),
       tvShowList = document.querySelector('.tv-shows__list'),
       cross = document.querySelector('.cross'),
@@ -15,7 +15,11 @@ const leftMenu = document.querySelector('.left-menu'),
       description = document.querySelector('.description'),
       modalLink = document.querySelector('.modal__link'),
       searchForm = document.querySelector('.search__form'),
-      searchFormInput = document.querySelector('.search__form-input');
+      searchFormInput = document.querySelector('.search__form-input'),
+      preloader = document.querySelector('.preloader'),
+      tvShowsHead = document.querySelector('.tv-shows__head'),
+      posterWrapper = document.querySelector('.poster__wrapper'),
+      modalContent = document.querySelector('.modal__content');
 
 const loading = document.createElement('div');
 loading.className = 'loading';
@@ -41,12 +45,28 @@ const DBService = class {
 
     getSearchResult = query => this.getData(`${SERVER}/search/tv?api_key=${API_KEY}&query=${query}&language=ru-RU`);
     
-    getTvShow = id => {
-        return this.getData(`${SERVER}/tv/${id}?api_key=${API_KEY}&language=ru-RU`)
-    }
+    getTvShow = id => this.getData(`${SERVER}/tv/${id}?api_key=${API_KEY}&language=ru-RU`)
+
+    getPopular = () => this.getData(`${SERVER}/tv/popular?api_key=${API_KEY}&language=ru-RU&page=1`)
+
+    getTopRated = () => this.getData(`${SERVER}/tv/top_rated?api_key=${API_KEY}&language=ru-RU&page=1`)
+
+    getToday = () => this.getData(`${SERVER}/tv/airing_today?api_key=${API_KEY}&language=ru-RU&page=1`)
+
+    getWeek = () => this.getData(`${SERVER}/tv/on_the_air?api_key=${API_KEY}&language=ru-RU&page=1`)
 } 
-const renderCard = response => {
+const dbservice = new DBService();
+const renderCard = (response, target) => {
     console.log(response);
+    if (!response.total_results) {// 0 = false, !0 = true
+        tvShowsHead.textContent = 'К сожалению по вашему запросу ничего не найдено!';
+        tvShowsHead.style.cssText = 'color: red; ';
+        loading.remove();
+        return;
+    }
+    tvShowsHead.textContent = target ? target.textContent : 'Результат поиска';
+    tvShowsHead.style.cssText = '';
+
     tvShowList.textContent = '';
     response.results.forEach(item => {
 
@@ -79,19 +99,27 @@ searchForm.addEventListener('submit', (e) => {
     const value = searchFormInput.value.trim();
     if (value) {
         tvShows.append(loading);
-        new DBService().getSearchResult(value).then(renderCard);
+        dbservice.getSearchResult(value).then(renderCard);
     }
     searchFormInput.value = '';
 });
 
+const closeDropdown = () => {
+    dropdown.forEach(item => {
+        item.classList.remove('active');
+    })
+}
+
 hamburger.addEventListener('click', () => {
     leftMenu.classList.toggle('openMenu');
     hamburger.classList.toggle('open');
+    closeDropdown();
 });
 document.addEventListener('click', event => {
     if (!event.target.closest('.left-menu')) {
         leftMenu.classList.remove('openMenu');
         hamburger.classList.remove('open'); 
+        closeDropdown();
     }//закрытие бургера при клике на НЕ меню    
 })
 leftMenu.addEventListener('click', event => {
@@ -104,7 +132,33 @@ leftMenu.addEventListener('click', event => {
         leftMenu.classList.add('openMenu');
         hamburger.classList.add('open');
     }
+    if (target.closest('#top-rated')) {
+        dbservice.getTopRated().then((response) => renderCard(response, target));
+
+        tvShows.append(loading);
+    }
+    if (target.closest('#popular')) {
+        console.log('popular');
+        dbservice.getPopular().then((response) => renderCard(response, target));
+        tvShows.append(loading);
+    }
+    if (target.closest('#week')) {
+        console.log('week');
+        dbservice.getWeek().then((response) => renderCard(response, target));
+        tvShows.append(loading);
+    }
+    if (target.closest('#today')) {
+        console.log('today');
+        dbservice.getToday().then((response) => renderCard(response, target));
+        tvShows.append(loading);
+    }
+
+    if (target.closest('#search')) {
+        tvShowList.textContent = '';
+        tvShowsHead.textContent = '';
+    }
 });
+
 //open modal
 tvShowList.addEventListener('click', event => {
     event.preventDefault();
@@ -113,9 +167,20 @@ tvShowList.addEventListener('click', event => {
     console.log(card);
     
     if (card) {
-        new DBService().getTvShow(card.id)
+        preloader.style.display = 'block';
+
+        dbservice.getTvShow(card.id)
         .then(response => {
             console.log(response);
+            if(response.poster_path) {
+                tvCardImg.src = IMG_URL + response.poster_path;
+                tvCardImg.alt = response.name;  
+                posterWrapper.style.display = '';
+                modalContent.style.paddingLeft = '';
+            } else {
+                posterWrapper.style.display = 'none';
+                modalContent.style.paddingLeft = '35px';
+            }
             tvCardImg.src = IMG_URL + response.poster_path;
             tvCardImg.alt = response.name;  
             modalTitle.textContent = response.name;
@@ -135,6 +200,9 @@ tvShowList.addEventListener('click', event => {
             document.body.style.overflow = 'hidden';
             modal.classList.remove('hide');
         })
+        .finally(() => {
+            preloader.style.display = '';
+        });
     }
 });
 //close modal
